@@ -15,13 +15,21 @@ class Post(db.Model, Timestamp):
     comments = db.relationship("Comment", back_populates="post")
 
 
-class Thumbnail():
+class Thumbnail(db.Model, Timestamp):
     __tablename__ = "thumbnail"
 
+    id = db.Column(db.Integer, primary_key=True)
     img = db.Column(db.Integer)
     post = db.Column(db.Integer, db.ForeignKey(Post.id), nullable=False)
     ...
     # TODO
+
+class MetaThumbnail(db.Model, Timestamp):
+    __tablename__ = "meta_thumbnail"
+
+    id = db.Column(db.Integer, primary_key=True)
+    img = db.Column(db.Integer)
+    post = db.Column(db.Integer, db.ForeignKey(Thumbnail.id), nullable=False)
 
 class Comment(db.Model, Timestamp):
     __tablename__ = "comments"
@@ -34,6 +42,9 @@ class Comment(db.Model, Timestamp):
     author = db.relationship(User, back_populates="comments")
     post = db.relationship(Post, back_populates="comments")
 
+class UnrelatedDataTwo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    body = db.Column(db.Text, nullable=False)
 
 class Record(db.Model, Timestamp):
     __tablename__ = "records"
