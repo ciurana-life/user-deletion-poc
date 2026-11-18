@@ -3,7 +3,8 @@
 import click
 
 from .db import db
-from .models import Comment, Post, Record, User
+from .models import User
+from .related_data_models import Comment, Post, Record
 
 
 def seed_data():

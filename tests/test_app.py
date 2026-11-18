@@ -3,7 +3,8 @@ import pytest
 from poc import create_app
 from poc.cli import seed_data
 from poc.db import db
-from poc.models import Comment, Post, Record, User
+from poc.models import User
+from poc.related_data_models import Comment, Post, Record
 
 
 @pytest.fixture

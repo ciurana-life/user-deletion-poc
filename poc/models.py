@@ -9,10 +9,37 @@
 """
 
 from .db import Timestamp, db
+from . import user_data   # noqa: E402,F401  registers the mapper listener for every model
+# from .user_data import UserData
+
+# # Not realy working for every scenario
+# # TODO - move to another file
+# # TODO - enum ?
+# POLICIES = ("delete", "anonymize")
+
+# class UserData():
+#     """ Aims to keep track all data related to the user in the db, so that
+#     it can easily be deleted (or anonymized) or downloaded for that user.
+
+#     Every class that inherits from ``UserData`` must set a ``user_data_policy`` attribute,
+#     this is enforced with the ``__init_subclass__`` method that runs at class definition time:
+#     if the attribute is missing or not on the ``POLICIES`` a TypeError is raised and
+#     the module defining the class fails to import.
+#     """
+
+#     def __init_subclass__(cls, **kwargs):
+#         super().__init_subclass__(**kwargs)
+#         if not hasattr(cls, "user_data_policy"):
+#             # TODO - more informative error message?
+#             raise TypeError(f"{cls.__name__}: set user_data_policy to one of {POLICIES} [1]")
+#         if cls.user_data_policy not in POLICIES:
+#             # TODO - more informative error message?
+#             raise TypeError(f"{cls.__name__}: set user_data_policy to one of {POLICIES} [2]")
 
 
 class User(db.Model, Timestamp):
     __tablename__ = "accounts_user"
+    user_data_policy = "anonymize"
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
@@ -28,43 +55,13 @@ class User(db.Model, Timestamp):
     def __repr__(self):
         return f"<User {self.id} {self.email}>"
 
+class ChildUser(User):
+    """Example of child class
+    """
+    something = db.Column(db.String(255))
 
-class Post(db.Model, Timestamp):
-    __tablename__ = "posts"
+class GrandChild(ChildUser):
+    """Example of more deep inheritance
+    """
+    something_else = db.Column(db.String(255))
 
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey(User.id), nullable=False)
-    title = db.Column(db.String(255), nullable=False)
-    body = db.Column(db.Text)
-
-    author = db.relationship(User, back_populates="posts")
-    comments = db.relationship("Comment", back_populates="post")
-
-
-class Comment(db.Model, Timestamp):
-    __tablename__ = "comments"
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey(User.id), nullable=False)
-    post_id = db.Column(db.Integer, db.ForeignKey(Post.id), nullable=False)
-    body = db.Column(db.Text, nullable=False)
-
-    author = db.relationship(User, back_populates="comments")
-    post = db.relationship(Post, back_populates="comments")
-
-
-class Record(db.Model, Timestamp):
-    __tablename__ = "records"
-
-    id = db.Column(db.Integer, primary_key=True)
-    data = db.Column(db.JSON, nullable=False, default=dict)
-
-    @classmethod
-    def owned_by(cls, user_id):
-        """Records whose JSON says {"access": {"owned_by": {"user": "<id>"}}}."""
-        owner = cls.data["access"]["owned_by"]["user"].as_string()
-        return cls.query.filter(owner == str(user_id))
-
-    @property
-    def title(self):
-        return self.data.get("metadata", {}).get("title", "")

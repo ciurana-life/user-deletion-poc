@@ -3,7 +3,8 @@
 from flask import Blueprint, render_template
 
 from .db import db
-from .models import Record, User
+from .models import User
+from .related_data_models import Record
 
 bp = Blueprint("poc", __name__)
 
