@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Users</h1>
+<table>
+  <tr><th>ID</th><th>Email</th><th>Username</th><th>Name</th><th>Posts</th><th>Comments</th></tr>
+  {% for u in users %}
+  <tr>
+    <td>{{ u.id }}</td>
+    <td><a href="{{ url_for('poc.user_detail', user_id=u.id) }}">{{ u.email }}</a></td>
+    <td>{{ u.username or '' }}</td>
+    <td>{{ u.full_name or '' }}</td>
+    <td>{{ u.posts|length }}</td>
+    <td>{{ u.comments|length }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">No users. Run <code>flask --app poc seed</code>.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}
