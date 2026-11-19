@@ -2,7 +2,6 @@ from .db import Timestamp, db
 
 class User(db.Model, Timestamp):
     __tablename__ = "accounts_user"
-    user_data_policy = "anonymize"
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
@@ -24,6 +23,7 @@ class ChildUser(User):
     something = db.Column(db.String(255))
 
 class GrandChild(ChildUser):
+    __tablename__ = "grand_child"
     """Example of more deep inheritance
     """
     something_else = db.Column(db.String(255))
