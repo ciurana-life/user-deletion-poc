@@ -22,6 +22,12 @@ The check runs once all models are loaded (see ``check_user_data``) and raises a
 TypeError listing every table or column that is missing a classification.
 """
 
+# TODO - better explanation and merge both docstrings
+# upper one is tags, bottom is deletion/anon
+"""
+On app startup all the user linked tables are traversed to build the deletion strategy.
+"""
+
 from sqlalchemy import event
 from sqlalchemy.orm import Mapper
 from .db import db
@@ -63,18 +69,17 @@ def find_user_linked_tables(metadata):
                 changed = True
     return linked
 
-def check_all_user_data(metadata):
+def check_all_user_data(metadata, user_linked_tables):
     """Return a list of human-readable errors for unclassified user data."""
-    linked = find_user_linked_tables(metadata)
     errors = []
-    for name in sorted(linked):
+    for name in sorted(user_linked_tables):
         table = metadata.tables.get(name)
         if table is None:
             continue
         if name != USER_TABLE and table.info.get("user_data") not in POLICIES:
             errors.append(f"{name}: set the arguments etc etc")
         for col in table.columns:
-            label = classify(col, linked)
+            label = classify(col, user_linked_tables)
             if label is None:
                 errors.append(f"{name}.{col.key}: missing info= etc etc")
             elif label not in LABELS:
@@ -98,10 +103,16 @@ InvenioDB init_db:
 def cehck_user_data():
     """Refuse to start if any user data is unclassified.
     
-    Note: it fires only once per process, so ina  test run only the first
-    ttest that creates the app resports the error.
+    Also builds the delete strategy.
+
+    Note: it fires only once per process, so in a test run, only the first
+    test that creates the app resports the error.
     """
-    if errors := check_all_user_data(db.metadata):
+    user_linked_tables = find_user_linked_tables(db.metadata)
+
+    # Stop if data is not classified
+    if errors := check_all_user_data(db.metadata, user_linked_tables):
         # TODO - make it a way nicer print.
         raise TypeError("Unclassified user data:\n " + "\n ".join(errors) + "\n Please visit ... for more info")
     
+    # Build the deletion strategy
