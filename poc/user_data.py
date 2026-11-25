@@ -32,6 +32,11 @@ from sqlalchemy import event
 from sqlalchemy.orm import Mapper
 from .db import db
 
+
+#
+#  PREVENTION LAYER (telling the developer he forgot to do something)
+#
+
 DEFAULTS = {"id": "keep", "created": "keep", "updated": "keep"}
 """Labels for common columns that don't need annotating."""
 
@@ -87,6 +92,62 @@ def check_all_user_data(metadata, user_linked_tables):
     return errors
 
 
+#
+#  POLICY LAYER (use the labels to generate SQL to get the user data to delete or download)
+#
+def build_policy_strategy(metadata, user_linked_tables):
+    
+    for name in sorted(user_linked_tables):
+        table = metadata.tables.get(name)
+        print(f"table: {name}, table_args: {table.info.get("user_data")}")
+        for col in table.columns:
+            print(f"\t\t - {col.name} : {col.info.get("user_data", None)}")
+
+    """
+    with this data we can build the DOWNLOAD and DELETE queries.
+    Returns:
+        table: accounts_user, table_args: None
+                        - id : None
+                        - email : scrub
+                        - username : scrub
+                        - full_name : scrub
+                        - affiliation : scrub
+                        - last_login_ip : scrub
+                        - active : keep
+                        - created : None
+                        - updated : None
+                        - something : scrub
+                        - something_else : scrub
+        table: comments, table_args: anonymize
+                        - id : None
+                        - user_id : None
+                        - post_id : None
+                        - body : keep
+                        - created : None
+                        - updated : None
+        table: meta_thumbnail, table_args: delete
+                        - id : None
+                        - img : keep
+                        - post : None
+                        - created : None
+                        - updated : None
+        table: posts, table_args: anonymize
+                        - id : None
+                        - user_id : None
+                        - title : keep
+                        - body : scrub
+                        - created : None
+                        - updated : None
+        table: thumbnail, table_args: delete
+                        - id : None
+                        - img : keep
+                        - post : None
+                        - created : None
+                        - updated : None
+    """
+    ...
+
+
 # TODO - remove this comment block in final version.
 """
 ``after_configured``
@@ -116,3 +177,4 @@ def cehck_user_data():
         raise TypeError("Unclassified user data:\n " + "\n ".join(errors) + "\n Please visit ... for more info")
     
     # Build the deletion strategy
+    build_policy_strategy(db.metadata, user_linked_tables)
