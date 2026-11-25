@@ -40,6 +40,42 @@ It is still a PoC, so some things are missing:
 4. `__table_args__` not defined.
 5. Anotations of types.
 
+## 2. Preventing future changes to continue without the correct data labeling (Opensearch).
+
+Most of what is in OpenSearch is indexed from Postgres. So if the Postgres columns are labeled, we
+already know what user data ends up in those indexes, and a reindex after deleting the user cleans them.
+
+The problem is code that writes straight to OpenSearch without going through Postgres. That data
+never passes the label check from #1, so we can't see it. Right now these are the direct writers:
+- invenio-jobs job logs: every `current_app.logger` call made during a job run is indexed, at DEBUG
+  level by default, together with the id of the user that started the run. Only the message text is
+  stored. Today the jobs in Zenodo log record ids, counts and, for the vocabulary imports, ORCID
+  entries (public data, not Zenodo accounts), so no emails or names of our users. The risk is error
+  messages that include the exception text, and future jobs that log user data in the message.
+
+- invenio-stats events: already anonymized before indexing, so nothing to do.
+- invenio-indexer, invenio-search and invenio-audit-logs: they write to OpenSearch but the data
+  comes from Postgres or is covered in #3.
+
+A document that only holds the user id is fine, because the account row is anonymized and the ids are kept.
+Only copies of email, name, IP and similar need action.
+
+
+To stop new direct writers from showing up unnoticed, CI will scan the installed invenio packages
+for direct `current_search_client` writes and compare them against an allowlist. If someone adds a new
+one, CI fails and they have to decide how that data is labeled before it gets added to the list.
+This check will live in invenio-app-rdm, because its CI installs the whole RDM stack.
+
+invenio-jobs is on that allowlist, so the check above won't notice if a job starts logging user data.
+Jobs need their own check for that. Like the canary test in #3, CI will create a test user with a
+known email and name, run every registered job, and then search the job logs index for that email
+and name. If they show up, CI fails.
+
+TODO POC:
+1. Build the allowlist check.
+2. Build the job logs canary check.
+3. Set `JOBS_LOGGING_RETENTION_DAYS` explicitly.
+
 
 ## 3. Preventing future changes to continue without the correct data labeling (audit Log).
 
