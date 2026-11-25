@@ -61,6 +61,29 @@ DELETE_STATEMENTS = []
 DOWNLOAD_QUERIES = {}
 """One SELECT per table, keyed by table name. Filled at startup."""
 
+EXTERNAL_DELETE_STATEMENTS = {}
+"""Statements added by other packages for data the foreign keys can't see,
+keyed by a name. For example the audit logs, which store the user id without
+a foreign key. The startup hook doesn't clear them.
+"""
+
+EXTERNAL_DOWNLOAD_QUERIES = {}
+"""Download queries added by other packages, keyed by file name."""
+
+
+def register_external_delete(name, statement):
+    """Add a statement that runs when a user is deleted.
+
+    Registering the same name again replaces it, so creating the app twice
+    (for example in tests) doesn't run it twice.
+    """
+    EXTERNAL_DELETE_STATEMENTS[name] = statement
+
+
+def register_external_download(name, query):
+    """Add a query whose rows are exported when a user downloads their data."""
+    EXTERNAL_DOWNLOAD_QUERIES[name] = query
+
 
 def build_policy_strategy(metadata, user_linked_tables):
     """Return what to do with each user-linked table, children first.
@@ -219,8 +242,15 @@ def build_download_queries(strategy, metadata):
 def delete_user_data(session, user_id):
     """Run every delete statement for one user, in one transaction."""
     parameters = {"target_user_id": user_id}
+
+    # External statements first: they only update their own tables (for
+    # example audit logs) and don't depend on the foreign-key ones.
+    for statement in EXTERNAL_DELETE_STATEMENTS.values():
+        session.execute(statement, parameters)
+
     for statement in DELETE_STATEMENTS:
         session.execute(statement, parameters)
+
     session.commit()
 
 
@@ -233,7 +263,11 @@ def download_user_data(session, user_id):
     zip_buffer = io.BytesIO()
 
     with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-        for table_name, query in DOWNLOAD_QUERIES.items():
+        all_queries = {}
+        all_queries.update(DOWNLOAD_QUERIES)
+        all_queries.update(EXTERNAL_DOWNLOAD_QUERIES)
+
+        for table_name, query in all_queries.items():
             result = session.execute(query, parameters)
 
             csv_buffer = io.StringIO()
