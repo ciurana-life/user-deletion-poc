@@ -71,10 +71,40 @@ Jobs need their own check for that. Like the canary test in #3, CI will create a
 known email and name, run every registered job, and then search the job logs index for that email
 and name. If they show up, CI fails.
 
+### What the PoC does
+
+OpenSearch runs in Docker (`docker compose up -d`, on port 19200 so it doesn't clash with a local Zenodo).
+
+- `search/` plays invenio-search + invenio-indexer. Indexes are registered with the table they are
+  built from and a function that turns a row into a document. `poc/search_indexes.py` registers
+  `users`, `posts` and `comments`, like Zenodo's users and community members indexes. The post and
+  comment documents copy the author's username from another table.
+- `jobs/` plays invenio-jobs: while a job runs, every `current_app.logger` line is written straight
+  to the `job-logs` index, with the id of the user that started it.
+
+Prevention (`search/prevention.py`, tests in `tests/test_search.py`):
+1. Direct writes: CI reads the code and lists every call that writes to OpenSearch. Only the modules
+   in `ALLOWED_DIRECT_WRITERS` may do it (`search.indexer`, `jobs.logging`, `jobs.policy`).
+2. Unknown indexes: CI lists the indexes in OpenSearch and fails if one is not registered or owned by
+   an allowed module.
+3. Canary: a canary user with a post and a comment is indexed and every job is run as them. After the
+   deletion, CI reads every document of every index and fails if a canary value is still there.
+4. Job logs canary: every job runs while the canary user exists, and none may log their personal data.
+
+Delete and download:
+- Before the deletion SQL runs, the ids of the user's rows are collected with the download queries
+  (deleted rows can't be found afterwards). After the commit, each of those rows is indexed again, or
+  its document is deleted if the row is gone. So the documents always match Postgres.
+- Job logs: nothing on deletion, they only hold ids and are removed by the retention.
+- Download: the indexes copy Postgres, which is already exported. Job logs are exported as
+  `job_logs.json`, found by the id of the user that started the job.
+
 TODO POC:
-1. Build the allowlist check.
-2. Build the job logs canary check.
-3. Set `JOBS_LOGGING_RETENTION_DAYS` explicitly.
+1. The direct-write check only finds calls on `search_client()`. In Invenio it should also look for
+   `current_search_client` and `opensearchpy` imports, and run over every installed invenio package.
+2. Set `JOBS_LOGGING_RETENTION_DAYS` explicitly.
+3. The reindex after deletion runs after the commit. If it fails, Postgres is clean but the old
+   documents stay, so it needs a retry (a Celery task in Invenio).
 
 
 ## 3. Preventing future changes to continue without the correct data labeling (audit Log).
@@ -102,7 +132,10 @@ every `scrub` field must hold a canary value, otherwise the test fails.
 
 ```bash
 uv sync
+docker compose up -d            # OpenSearch on http://localhost:19200
 uv run flask --app poc seed     # reset DB + demo data
+uv run flask --app poc reindex  # build the OpenSearch indexes from the DB
+uv run flask --app poc run-job send_digest --user-id 1   # writes to the job-logs index
 uv run flask --app poc run      # http://127.0.0.1:5000
-uv run pytest
+uv run pytest                   # OpenSearch tests are skipped if it's not running
 ```

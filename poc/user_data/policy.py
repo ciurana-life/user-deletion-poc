@@ -42,6 +42,7 @@ rows before they are deleted.
 
 import csv
 import io
+import json
 import zipfile
 
 import sqlalchemy as sa
@@ -83,6 +84,34 @@ def register_external_delete(name, statement):
 def register_external_download(name, query):
     """Add a query whose rows are exported when a user downloads their data."""
     EXTERNAL_DOWNLOAD_QUERIES[name] = query
+
+
+EXTERNAL_DOWNLOAD_FUNCTIONS = {}
+"""Downloads of data that is not in the database, keyed by file name.
+For example the job logs, which only live in OpenSearch.
+"""
+
+AFTER_DELETE_HOOKS = {}
+"""Functions that run after the deletion is committed, keyed by a name.
+For example the search package, which reindexes the user's documents.
+"""
+
+
+def register_external_download_function(name, function):
+    """Add a function whose result is exported as ``<name>.json``.
+
+    The function takes the user id and returns a list of dicts.
+    """
+    EXTERNAL_DOWNLOAD_FUNCTIONS[name] = function
+
+
+def register_after_delete(name, hook):
+    """Add a function that runs after a user's data is deleted.
+
+    The function gets the ids of every row the deletion touched, by table. For example:
+        {"accounts_user": [1], "posts": [1, 2], "thumbnail": [4]}
+    """
+    AFTER_DELETE_HOOKS[name] = hook
 
 
 def build_policy_strategy(metadata, user_linked_tables):
@@ -239,9 +268,44 @@ def build_download_queries(strategy, metadata):
     return queries
 
 
-def delete_user_data(session, user_id):
-    """Run every delete statement for one user, in one transaction."""
+def primary_key_name(query):
+    """Return the name of the primary key column of the table a download query reads.
+
+    For example, the query for "posts" returns "id".
+    """
+    table = query.get_final_froms()[0]
+    primary_key_columns = list(table.primary_key.columns)
+    return primary_key_columns[0].key
+
+
+def find_user_row_ids(session, user_id):
+    """Return the ids of the user's rows in every user-linked table.
+
+    It reuses the download queries, because they find exactly the rows the
+    deletion touches. For example:
+        {"accounts_user": [1], "posts": [1, 2], "comments": [2], "thumbnail": [4]}
+    """
     parameters = {"target_user_id": user_id}
+    row_ids_by_table = {}
+
+    for table_name, query in DOWNLOAD_QUERIES.items():
+        id_column = primary_key_name(query)
+        rows = session.execute(query, parameters).mappings()
+
+        row_ids = []
+        for row in rows:
+            row_ids.append(row[id_column])
+        row_ids_by_table[table_name] = row_ids
+
+    return row_ids_by_table
+
+
+def delete_user_data(session, user_id):
+    """Run every delete statement for one user, in one transaction, then the after-delete hooks."""
+    parameters = {"target_user_id": user_id}
+
+    # Find the rows first: once deleted, they can't be found anymore.
+    user_row_ids = find_user_row_ids(session, user_id)
 
     # External statements first: they only update their own tables (for
     # example audit logs) and don't depend on the foreign-key ones.
@@ -252,6 +316,12 @@ def delete_user_data(session, user_id):
         session.execute(statement, parameters)
 
     session.commit()
+
+    # After the commit, so the hooks read the anonymized rows, not the old ones.
+    # The SQL ran with Core statements, so the session may still hold old copies.
+    session.expire_all()
+    for hook in AFTER_DELETE_HOOKS.values():
+        hook(user_row_ids)
 
 
 def download_user_data(session, user_id):
@@ -277,5 +347,10 @@ def download_user_data(session, user_id):
                 writer.writerow(row)
 
             zip_file.writestr(f"{table_name}.csv", csv_buffer.getvalue())
+
+        # Data outside the database has no fixed columns, so it is exported as JSON.
+        for name, function in EXTERNAL_DOWNLOAD_FUNCTIONS.items():
+            documents = function(user_id)
+            zip_file.writestr(f"{name}.json", json.dumps(documents, indent=2, default=str))
 
     return zip_buffer.getvalue()

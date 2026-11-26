@@ -35,7 +35,7 @@ CANARY_VALUES = (CANARY_EMAIL, CANARY_USERNAME, CANARY_FULL_NAME, CANARY_IP, CAN
 
 @pytest.fixture
 def app():
-    app = create_app({"SQLALCHEMY_DATABASE_URI": "sqlite://", "TESTING": True})
+    app = create_app({"SQLALCHEMY_DATABASE_URI": "sqlite://", "TESTING": True, "SEARCH_ENABLED": False})
     with app.app_context():
         seed_data()
         yield app

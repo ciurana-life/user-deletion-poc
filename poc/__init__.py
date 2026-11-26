@@ -27,6 +27,16 @@ def create_app(config=None):
     from audit_logs.ext import init_audit_logs
     init_audit_logs(app)
 
+    # OpenSearch: the indexes built from Postgres, and the reindex after a user deletion.
+    from . import search_indexes  # noqa: F401  registers the indexes
+    from search.ext import init_search
+    init_search(app)
+
+    # Jobs: their log lines go straight to OpenSearch.
+    from . import demo_jobs  # noqa: F401  registers the jobs
+    from jobs.ext import init_jobs
+    init_jobs(app)
+
     from . import cli, views
 
     app.register_blueprint(views.bp)

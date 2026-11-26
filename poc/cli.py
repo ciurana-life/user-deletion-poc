@@ -2,6 +2,10 @@
 
 import click
 
+from jobs.registry import run_job
+from search.indexer import rebuild_all_indexes
+from search.indexes import REGISTERED_INDEXES
+
 from .db import db
 from .models import User
 from .related_data_models import Comment, Post, Record
@@ -69,3 +73,17 @@ def register(app):
         """Reset the database and insert demo data."""
         seed_data()
         click.echo("Seeded: 3 users, 3 posts, 3 comments, 3 records.")
+
+    @app.cli.command("reindex")
+    def reindex():
+        """Rebuild every OpenSearch index from the database."""
+        rebuild_all_indexes()
+        click.echo(f"Rebuilt: {', '.join(REGISTERED_INDEXES)}.")
+
+    @app.cli.command("run-job")
+    @click.argument("job_id")
+    @click.option("--user-id", default=1, help="The user who starts the job.")
+    def run_job_command(job_id, user_id):
+        """Run a job. Its log lines are written to the job logs index."""
+        run_job(job_id, user_id)
+        click.echo(f"Ran {job_id} as user {user_id}.")

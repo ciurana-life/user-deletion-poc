@@ -9,7 +9,7 @@ from poc.related_data_models import Comment, Post, Record
 
 @pytest.fixture
 def app():
-    app = create_app({"SQLALCHEMY_DATABASE_URI": "sqlite://", "TESTING": True})
+    app = create_app({"SQLALCHEMY_DATABASE_URI": "sqlite://", "TESTING": True, "SEARCH_ENABLED": False})
     with app.app_context():
         seed_data()
         yield app

@@ -1,0 +1,13 @@
+# OpenSearch for the PoC: `docker compose up -d`, then http://localhost:19200
+# Port 19200 so it doesn't clash with a local Zenodo, which uses 9200.
+# Security is off so the app and tests can connect without certificates or passwords.
+services:
+  opensearch:
+    image: opensearchproject/opensearch:3.9.0
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "127.0.0.1:19200:9200"
