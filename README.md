@@ -92,6 +92,12 @@ And finally models will implement a new `__init_subclass__` that will check that
 TODO: 
 PoC + first pass deletion strategy like in #1
 
+TODO canary: right now the test only forces a canary case to exist for every action, not that the case
+fills every field. A new field can stay empty and the canary will never check it. The fields are not
+filled programmatically on purpose, the values have to go through the real write path. So the test must
+force us to write them: every labelled field of every action must have a value in the written log, and
+every `scrub` field must hold a canary value, otherwise the test fails.
+
 ## Run
 
 ```bash
